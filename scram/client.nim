@@ -73,7 +73,7 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
   var matches: array[1, string]
   if match(serverFinalMessage, SERVER_FINAL_MESSAGE, matches):
     let proposedServerSignature = base64.decode(matches[0])
-    s.isSuccessful = proposedServerSignature == s.serverSignature
+    s.isSuccessful = proposedServerSignature == $s.serverSignature
   result = s.isSuccessful
 
 proc isSuccessful*(s: ScramClient): bool =
