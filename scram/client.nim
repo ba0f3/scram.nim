@@ -1,4 +1,4 @@
-import base64, pegs, random, strutils, hmac, nimSHA2, securehash, md5, private/[utils,types]
+import base64, pegs, random, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA256Digest, SHA512Digest
 
