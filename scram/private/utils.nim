@@ -1,10 +1,7 @@
-import random, base64, strutils, types, hmac
+import random, base64, strutils, types, hmac, sha1
 randomize()
 
-proc `$`*(sha: Sha1Digest): string =
-  result = ""
-  for v in sha:
-    result.add(toHex(int(v), 2))
+proc `$`*(sha: Sha1Digest): string = sha.toHex()
 
 proc makeNonce*(): string {.inline.} = result = base64.encode($random(1.0))[0..^3]
 
