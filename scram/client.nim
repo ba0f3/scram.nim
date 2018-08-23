@@ -46,11 +46,11 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     iterations = parseInt(matches[2])
   else:
     s.state = ENDED
-    return nil
+    return ""
 
   if not nonce.startsWith(s.clientNonce) or iterations < 0:
     s.state = ENDED
-    return nil
+    return ""
 
   let
     saltedPassword = hi[T](password, salt, iterations)
