@@ -22,10 +22,8 @@ let
 proc initUserData*(password: string, iterations = 4096): UserData =
   var iterations = iterations
   var password = password
-  if password.isNilOrEmpty:
-    password =""
+  if password.len == 0:
     iterations = 1
-
   let
     salt = makeNonce()[0..24]
     saltedPassword = hi[SHA256Digest](password, salt, iterations)
@@ -44,7 +42,7 @@ proc initUserData*(salt: string, iterations: int, serverKey, storedKey: string):
   result.serverKey = serverKey
   result.storedKey = storedKey
 
-proc newScramServer*[T](salt: string = nil, iterations = 4096): ScramServer[T] =
+proc newScramServer*[T](salt = "", iterations = 4096): ScramServer[T] =
   result = new(ScramServer[T])
   result.state = INITIAL
   result.isSuccessful = false
@@ -53,7 +51,7 @@ proc handleClientFirstMessage*[T](s: ScramServer[T],clientFirstMessage: string):
   var matches: array[3, string]
   if not match(clientFirstMessage, CLIENT_FIRST_MESSAGE, matches):
     s.state = ENDED
-    return nil
+    return
   s.clientFirstMessageBare = matches[0]
   s.serverNonce = matches[2] & makeNonce()
   s.state = FIRST_CLIENT_MESSAGE_HANDLED
@@ -69,7 +67,7 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
   var matches: array[4, string]
   if not match(clientFinalMessage, CLIENT_FINAL_MESSAGE, matches):
     s.state = ENDED
-    return nil
+    return
   let
     clientFinalMessageWithoutProof = matches[0]
     nonce = matches[2]
@@ -77,7 +75,7 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
 
   if nonce != s.serverNonce:
     s.state = ENDED
-    return nil
+    return
 
   let
     authMessage = join([s.clientFirstMessageBare, s.serverFirstMessage, clientFinalMessageWithoutProof], ",")
@@ -90,7 +88,7 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
 
   let resultKey = $HASH[T](clientKey)
   if resultKey != storedKey:
-    return nil
+    return
 
   s.isSuccessful = true
   s.state = ENDED

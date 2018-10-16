@@ -3,7 +3,8 @@ randomize()
 
 proc `$`*(sha: Sha1Digest): string = sha.toHex()
 
-proc makeNonce*(): string {.inline.} = result = base64.encode($random(1.0))[0..^3]
+template makeNonce*(): string =
+  $hmac_sha1($rand(int.high), "scram.nim")
 
 template `^=`*[T](a, b: T) =
   for x in 0..<a.len:
