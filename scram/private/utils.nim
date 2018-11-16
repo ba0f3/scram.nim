@@ -1,4 +1,7 @@
 import random, base64, strutils, types, hmac, sha1
+from md5 import MD5Digest
+from nimSHA2 import Sha256Digest, Sha512Digest
+
 randomize()
 
 proc `$`*(sha: Sha1Digest): string = sha.toHex()
