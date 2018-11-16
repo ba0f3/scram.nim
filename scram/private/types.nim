@@ -16,6 +16,6 @@ type
 
 const
   GS2_HEADER* = "n,,"
-  INT_1* = "\x0\x0\x0\x1"
+  INT_1* = "\x00\x00\x00\x01"
   CLIENT_KEY* = "Client Key"
   SERVER_KEY* = "Server Key"
