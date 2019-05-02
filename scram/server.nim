@@ -21,7 +21,6 @@ let
 
 proc initUserData*(password: string, iterations = 4096): UserData =
   var iterations = iterations
-  var password = password
   if password.len == 0:
     iterations = 1
   let
@@ -42,10 +41,8 @@ proc initUserData*(salt: string, iterations: int, serverKey, storedKey: string):
   result.serverKey = serverKey
   result.storedKey = storedKey
 
-proc newScramServer*[T](salt = "", iterations = 4096): ScramServer[T] =
-  result = new(ScramServer[T])
-  result.state = INITIAL
-  result.isSuccessful = false
+proc newScramServer*[T](): ScramServer[T] {.deprecated: "use `new ScramServer[T]` instead".} =
+  new ScramServer[T]
 
 proc handleClientFirstMessage*[T](s: ScramServer[T],clientFirstMessage: string): string =
   var matches: array[3, string]
@@ -55,13 +52,13 @@ proc handleClientFirstMessage*[T](s: ScramServer[T],clientFirstMessage: string):
   s.clientFirstMessageBare = matches[0]
   s.serverNonce = matches[2] & makeNonce()
   s.state = FIRST_CLIENT_MESSAGE_HANDLED
-  result = matches[1] # username
+  matches[1] # username
 
 proc prepareFirstMessage*(s: ScramServer, userData: UserData): string =
   s.state = FIRST_PREPARED
   s.userData = userData
   s.serverFirstMessage = "r=$#,s=$#,i=$#" % [s.serverNonce, userData.salt, $userData.iterations]
-  result = s.serverFirstMessage
+  s.serverFirstMessage
 
 proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): string =
   var matches: array[4, string]
@@ -92,19 +89,19 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
 
   s.isSuccessful = true
   s.state = ENDED
-  result = "v=" & base64.encode(serverSignature, newLine="")
+  "v=" & base64.encode(serverSignature, newLine="")
 
 
 proc isSuccessful*(s: ScramServer): bool =
   if s.state != ENDED:
     raise newException(ScramError, "You cannot call this method before authentication is ended")
-    return s.isSuccessful
+  s.isSuccessful
 
 proc isEnded*(s: ScramServer): bool =
-  result = s.state == ENDED
+  s.state == ENDED
 
 proc getState*(s: ScramServer): ScramState =
-  result = s.state
+  s.state
 
 when isMainModule:
   import client as c
@@ -113,8 +110,11 @@ when isMainModule:
     password = "secret"
     userdata = initUserData(password)
 
-    server = newScramServer[SHA256Digest]()
+    server = new ScramServer[SHA256Digest]
     client = newScramClient[SHA256Digest]()
+
+  assert(server.state == INITIAL)
+  assert(server.isSuccessful == false)
 
   let clientFirstMessage = client.prepareFirstMessage(username)
   echo "Client first message: ", clientFirstMessage
@@ -133,8 +133,3 @@ when isMainModule:
 
   assert client.verifyServerFinalMessage(serverFinalMessage) == true
   echo "Client is successful: ", client.isSuccessful() == true
-
-
-
-
-

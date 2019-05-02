@@ -17,12 +17,10 @@ let
 
 proc newScramClient*[T](): ScramClient[T] =
   result = new(ScramClient[T])
-  result.state = INITIAL
   result.clientNonce = makeNonce()
-  result.isSuccessful = false
 
 proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [ScramError]} =
-  if username.isNilOrEmpty:
+  if username.len == 0:
     raise newException(ScramError, "username cannot be nil or empty")
   var username = username.replace("=", "=3D").replace(",", "=2C")
   s.clientFirstMessageBare = "n="
@@ -30,10 +28,11 @@ proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [S
   s.clientFirstMessageBare.add(",r=")
   s.clientFirstMessageBare.add(s.clientNonce)
 
-  result = GS2_HEADER & s.clientFirstMessageBare
   s.state = FIRST_PREPARED
+  GS2_HEADER & s.clientFirstMessageBare
 
-proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: string): string {.raises: [ScramError, OverflowError, ValueError].} =
+
+proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: string): string =
   if s.state != FIRST_PREPARED:
     raise newException(ScramError, "First message have not been prepared, call prepareFirstMessage() first")
   var
@@ -57,14 +56,14 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     clientKey = HMAC[T]($saltedPassword, CLIENT_KEY)
     storedKey = HASH[T]($clientKey)
     serverKey = HMAC[T]($saltedPassword, SERVER_KEY)
-    clientFinalMessageWithoutProof = "c=" & base64.encode(GS2_HEADER) & ",r=" & nonce
-    authMessage = s.clientFirstMessageBare & "," & serverFirstMessage & "," & clientFinalMessageWithoutProof
+    clientFinalMessageWithoutProof = "c=biws,r=" & nonce
+    authMessage =[s.clientFirstMessageBare, serverFirstMessage, clientFinalMessageWithoutProof].join(",")
     clientSignature = HMAC[T]($storedKey, authMessage)
   s.serverSignature = HMAC[T]($serverKey, authMessage)
   var clientProof = clientKey
   clientProof ^= clientSignature
   s.state = FINAL_PREPARED
-  result = clientFinalMessageWithoutProof & ",p=" & base64.encode(clientProof, newLine="")
+  clientFinalMessageWithoutProof & ",p=" & base64.encode(clientProof, newLine="")
 
 proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool =
   if s.state != FINAL_PREPARED:
@@ -74,18 +73,18 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
   if match(serverFinalMessage, SERVER_FINAL_MESSAGE, matches):
     let proposedServerSignature = base64.decode(matches[0])
     s.isSuccessful = proposedServerSignature == $s.serverSignature
-  result = s.isSuccessful
+  s.isSuccessful
 
 proc isSuccessful*(s: ScramClient): bool =
   if s.state != ENDED:
     raise newException(ScramError, "You cannot call this method before authentication is ended")
-  return s.isSuccessful
+  s.isSuccessful
 
 proc isEnded*(s: ScramClient): bool =
-  result = s.state == ENDED
+  s.state == ENDED
 
 proc getState*(s: ScramClient): ScramState =
-  result = s.state
+  s.state
 
 when isMainModule:
   var s = newScramClient[Sha256Digest]()
