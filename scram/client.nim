@@ -1,10 +1,10 @@
-import base64, pegs, random, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
+import base64, pegs, random, strutils, hmac, std/sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA256Digest, SHA512Digest
 
 type
   ScramClient[T] = ref object of RootObj
-    clientNonce: string
+    clientNonce*: string
     clientFirstMessageBare: string
     state: ScramState
     isSuccessful: bool
@@ -46,6 +46,8 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
   else:
     s.state = ENDED
     return ""
+
+  echo iterations
 
   if not nonce.startsWith(s.clientNonce) or iterations < 0:
     s.state = ENDED
