@@ -1,4 +1,4 @@
-import base64, pegs, random, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
+import base64, pegs, random, strutils, hmac, std/sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA256Digest, SHA512Digest
 
@@ -72,7 +72,6 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
   s.state = ENDED
   var matches: array[1, string]
   if match(serverFinalMessage, SERVER_FINAL_MESSAGE, matches):
-    echo base64.encode($%s.serverSignature, newLine="")
     let proposedServerSignature = base64.decode(matches[0])
     s.isSuccessful = proposedServerSignature == $%s.serverSignature
   s.isSuccessful

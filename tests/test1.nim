@@ -6,7 +6,6 @@ proc test[T](user, password, nonce, cfirst, sfirst, cfinal, sfinal: string) =
   client.clientNonce = nonce
   assert client.prepareFirstMessage(user) == cfirst, "incorrect first message"
   let fmsg = client.prepareFinalMessage(password, sfirst)
-  echo fmsg
   assert fmsg == cfinal, "incorrect final message"
   assert client.verifyServerFinalMessage(sfinal), "incorrect server final message"
 
