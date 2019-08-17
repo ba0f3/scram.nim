@@ -1,4 +1,4 @@
-import base64, pegs, random, strutils, hmac, std/sha1, nimSHA2, md5, private/[utils,types]
+import base64, pegs, random, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA256Digest, SHA512Digest
 
@@ -46,7 +46,9 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     s.state = ENDED
     return ""
 
-  if not nonce.startsWith(s.clientNonce) or iterations < 0:
+  if not nonce.startsWith(s.clientNonce):
+    raise newException(ScramError, "Security error: invalid nonce received from server. Possible man-in-the-middle attack.")
+  if iterations < 0:
     s.state = ENDED
     return ""
 
@@ -90,7 +92,34 @@ when isMainModule:
   var s = newScramClient[Sha256Digest]()
   s.clientNonce = "VeAOLsQ22fn/tjalHQIz7cQT"
 
-  echo s.prepareFirstMessage("bob")
+  echo "test 1"
+  let firstMessage = s.prepareFirstMessage("bob")
+  # echo firstMessage
   let finalMessage = s.prepareFinalMessage("secret", "r=VeAOLsQ22fn/tjalHQIz7cQTmeE5qJh8qKEe8wALMut1,s=ldZSefTzKxPNJhP73AmW/A==,i=4096")
-  echo finalMessage
+  # echo finalMessage
   assert(finalMessage == "c=biws,r=VeAOLsQ22fn/tjalHQIz7cQTmeE5qJh8qKEe8wALMut1,p=AtNtxGzsMA8evcWBM0MXFjxN8OcG1KRkLkFyoHlupOU=")
+  echo "  passed"
+
+  # test from RFC 5802, see https://tools.ietf.org/html/rfc5802  part 5
+  #
+  # (username 'user' and password 'pencil' are used):
+  #    C: n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL
+  #    S: r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,
+  #       i=4096
+  #    C: c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,
+  #       p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=
+  #    S: v=rmF9pqV8S7suAoZWja4dJRkFsKQ=
+  #
+  echo "test 2"
+  var rfc = newScramClient[Sha1Digest]()
+  rfc.clientNonce = "fyko+d2lbbFgONRv9qkxdawL" # override for sake of test
+  let rfcC1 = rfc.prepareFirstMessage("user")
+  assert(rfcC1 == "n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL")
+  let rfcS1 = "r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,i=4096"
+  # NOTE: the example in the RFC uses a password of "pencil", for applications such as
+  #       MongoDb, the "password" is an MD5 of <username>:mongodb:<password>. Such
+  #       manipulation occurs before 'prepareFinalMessage' is called.
+  let rfcC2 = rfc.prepareFinalMessage("pencil", rfcS1)
+  echo rfcC2
+  assert(rfcC2 == "c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=")
+  echo "  passed"
