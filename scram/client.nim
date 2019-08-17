@@ -31,7 +31,6 @@ proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [S
   s.state = FIRST_PREPARED
   GS2_HEADER & s.clientFirstMessageBare
 
-
 proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: string): string =
   if s.state != FIRST_PREPARED:
     raise newException(ScramError, "First message have not been prepared, call prepareFirstMessage() first")
@@ -55,13 +54,13 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
 
   let
     saltedPassword = hi[T](password, salt, iterations)
-    clientKey = HMAC[T]($saltedPassword, CLIENT_KEY)
-    storedKey = HASH[T]($clientKey)
-    serverKey = HMAC[T]($saltedPassword, SERVER_KEY)
+    clientKey = HMAC[T]($%saltedPassword, CLIENT_KEY)
+    storedKey = HASH[T]($%clientKey)
+    serverKey = HMAC[T]($%saltedPassword, SERVER_KEY)
     clientFinalMessageWithoutProof = "c=biws,r=" & nonce
     authMessage =[s.clientFirstMessageBare, serverFirstMessage, clientFinalMessageWithoutProof].join(",")
-    clientSignature = HMAC[T]($storedKey, authMessage)
-  s.serverSignature = HMAC[T]($serverKey, authMessage)
+    clientSignature = HMAC[T]($%storedKey, authMessage)
+  s.serverSignature = HMAC[T]($%serverKey, authMessage)
   var clientProof = clientKey
   clientProof ^= clientSignature
   s.state = FINAL_PREPARED
@@ -73,8 +72,9 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
   s.state = ENDED
   var matches: array[1, string]
   if match(serverFinalMessage, SERVER_FINAL_MESSAGE, matches):
+    echo base64.encode($%s.serverSignature, newLine="")
     let proposedServerSignature = base64.decode(matches[0])
-    s.isSuccessful = proposedServerSignature == $s.serverSignature
+    s.isSuccessful = proposedServerSignature == $%s.serverSignature
   s.isSuccessful
 
 proc isSuccessful*(s: ScramClient): bool =
