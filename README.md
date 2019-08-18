@@ -1,5 +1,7 @@
+[![Build Status](https://travis-ci.org/ba0f3/scram.nim.svg?branch=master)](https://travis-ci.org/ba0f3/scram.nim)
+
 # scram
-Salted Challenge Response Authentication Mechanism (SCRAM) 
+Salted Challenge Response Authentication Mechanism (SCRAM)
 
 
 ```nim
