@@ -11,7 +11,7 @@ proc `$%`*[T: MD5Digest|Sha1Digest|SHA256Digest|SHA512Digest](input: T): string 
     result[i] = input[i].char
 
 template makeNonce*(): string =
-  toHex(hmac_sha1($rand(int.high), "scram.nim"))
+  base64.encode(hmac_sha1($rand(int.high), "scram.nim"))
 
 template `^=`*[T](a, b: T) =
   for x in 0..<a.len:
