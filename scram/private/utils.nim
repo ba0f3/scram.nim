@@ -1,6 +1,6 @@
 import random, base64, strutils, types, hmac
 from md5 import MD5Digest
-from std/sha1 import Sha1Digest
+from sha1 import Sha1Digest
 from nimSHA2 import Sha256Digest, Sha512Digest
 
 randomize()

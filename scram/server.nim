@@ -1,4 +1,4 @@
-import base64, pegs, random, strutils, hmac, std/sha1, nimSHA2, md5, private/[utils,types]
+import base64, pegs, strutils, hmac, nimSHA2, private/[utils,types]
 
 type
   ScramServer*[T] = ref object of RootObj
@@ -26,14 +26,14 @@ proc initUserData*(password: string, iterations = 4096): UserData =
   let
     salt = makeNonce()[0..24]
     saltedPassword = hi[SHA256Digest](password, salt, iterations)
-    clientKey = HMAC[SHA256Digest]($saltedPassword, CLIENT_KEY)
-    storedKey = HASH[SHA256Digest]($clientKey)
-    serverKey = HMAC[SHA256Digest]($saltedPassword, SERVER_KEY)
+    clientKey = HMAC[SHA256Digest]($%saltedPassword, CLIENT_KEY)
+    storedKey = HASH[SHA256Digest]($%clientKey)
+    serverKey = HMAC[SHA256Digest]($%saltedPassword, SERVER_KEY)
 
   result.salt = base64.encode(salt)
   result.iterations = iterations
-  result.storedKey = base64.encode($storedKey)
-  result.serverKey = base64.encode($serverKey)
+  result.storedKey = base64.encode($%storedKey)
+  result.serverKey = base64.encode($%serverKey)
 
 proc initUserData*(salt: string, iterations: int, serverKey, storedKey: string): UserData =
   result.salt = salt
