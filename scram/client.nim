@@ -64,7 +64,10 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
   var clientProof = clientKey
   clientProof ^= clientSignature
   s.state = FINAL_PREPARED
-  clientFinalMessageWithoutProof & ",p=" & base64.encode(clientProof, newLine="")
+  when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
+    clientFinalMessageWithoutProof & ",p=" & base64.encode(clientProof)
+  else:
+    clientFinalMessageWithoutProof & ",p=" & base64.encode(clientProof, newLine="")
 
 proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool =
   if s.state != FINAL_PREPARED:

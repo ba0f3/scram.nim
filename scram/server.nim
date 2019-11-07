@@ -89,7 +89,10 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
 
   s.isSuccessful = true
   s.state = ENDED
-  "v=" & base64.encode(serverSignature, newLine="")
+  when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
+    "v=" & base64.encode(serverSignature)
+  else:
+    "v=" & base64.encode(serverSignature, newLine="")
 
 
 proc isSuccessful*(s: ScramServer): bool =
