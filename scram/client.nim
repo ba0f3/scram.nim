@@ -10,10 +10,22 @@ type
     isSuccessful: bool
     serverSignature: T
 
-let
-  SERVER_FIRST_MESSAGE = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
-  SERVER_FINAL_MESSAGE = peg"'v='{[^,]*}$"
-
+when compileOption("threads"):
+  var
+    SERVER_FIRST_MESSAGE_VAL {.threadvar.}: ref Peg
+    SERVER_FINAL_MESSAGE_VAL {.threadvar.}: ref Peg
+  template SERVER_FIRST_MESSAGE: Peg =
+    if SERVER_FIRST_MESSAGE_VAL.isNil:
+      SERVER_FIRST_MESSAGE_VAL[] = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
+    SERVER_FIRST_MESSAGE_VAL[]
+  template SERVER_FINAL_MESSAGE: Peg =
+    if SERVER_FINAL_MESSAGE_VAL.isNil:
+      SERVER_FINAL_MESSAGE_VAL[] = peg"'v='{[^,]*}$"
+    SERVER_FINAL_MESSAGE_VAL[]
+else:
+  let
+    SERVER_FIRST_MESSAGE = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
+    SERVER_FINAL_MESSAGE = peg"'v='{[^,]*}$"
 
 proc newScramClient*[T](): ScramClient[T] =
   result = new(ScramClient[T])

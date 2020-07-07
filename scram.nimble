@@ -1,4 +1,4 @@
-version       = "0.1.10"
+version       = "0.1.11"
 author        = "Huy Doan"
 description   = "Salted Challenge Response Authentication Mechanism (SCRAM) "
 license       = "MIT"
