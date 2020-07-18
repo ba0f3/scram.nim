@@ -10,10 +10,10 @@ type
     userData: UserData
 
   UserData* = object
-    salt: string
-    iterations: int
-    serverKey: string
-    storedKey: string
+    salt*: string
+    iterations*: int
+    serverKey*: string
+    storedKey*: string
 
 let
   CLIENT_FIRST_MESSAGE = peg"^([pny]'='?([^,]*)','([^,]*)','){('m='([^,]*)',')?'n='{[^,]*}',r='{[^,]*}(','(.*))*}$"
