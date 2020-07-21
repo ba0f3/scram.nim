@@ -12,14 +12,16 @@ type
 
 when compileOption("threads"):
   var
-    SERVER_FIRST_MESSAGE_VAL {.threadvar.}: ref Peg
-    SERVER_FINAL_MESSAGE_VAL {.threadvar.}: ref Peg
+    SERVER_FIRST_MESSAGE_VAL: ptr Peg
+    SERVER_FINAL_MESSAGE_VAL: ptr Peg
   template SERVER_FIRST_MESSAGE: Peg =
     if SERVER_FIRST_MESSAGE_VAL.isNil:
+      SERVER_FIRST_MESSAGE_VAL = cast[ptr Peg](allocShared0(sizeof(Peg)))
       SERVER_FIRST_MESSAGE_VAL[] = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
     SERVER_FIRST_MESSAGE_VAL[]
   template SERVER_FINAL_MESSAGE: Peg =
     if SERVER_FINAL_MESSAGE_VAL.isNil:
+      SERVER_FINAL_MESSAGE_VAL = cast[ptr Peg](allocShared0(sizeof(Peg)))
       SERVER_FINAL_MESSAGE_VAL[] = peg"'v='{[^,]*}$"
     SERVER_FINAL_MESSAGE_VAL[]
 else:
