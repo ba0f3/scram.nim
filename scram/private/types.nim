@@ -1,11 +1,14 @@
 type
-  ScramError* = object of Exception
+  ScramError* = object of CatchableError
 
   DigestType* = enum
     MD5
-    SHA1
-    SHA256
-    SHA512
+    SHA_1
+    SHA_224
+    SHA_256
+    SHA_384
+    SHA_512
+    SHA3_512
 
   ScramState* = enum
     INITIAL

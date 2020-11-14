@@ -1,14 +1,14 @@
-import base64, pegs, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
-
-export MD5Digest, SHA1Digest, SHA256Digest, SHA512Digest
+import base64, pegs, strutils, nimcrypto, private/[types, utils]
+export nimcrypto
 
 type
-  ScramClient[T] = ref object of RootObj
+  ScramClient = ref object of RootObj
+    hashType: typedesc
     clientNonce*: string
     clientFirstMessageBare: string
     state: ScramState
     isSuccessful: bool
-    serverSignature: T
+    serverSignature: string
 
 when compileOption("threads"):
   var
@@ -29,8 +29,9 @@ else:
     SERVER_FIRST_MESSAGE = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
     SERVER_FINAL_MESSAGE = peg"'v='{[^,]*}$"
 
-proc newScramClient*[T](): ScramClient[T] =
-  result = new(ScramClient[T])
+proc newScramClient*(hashType: typedesc): ScramClient =
+  result = new(ScramClient)
+  result.hashType = hashType
   result.clientNonce = makeNonce()
 
 proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [ScramError]} =
@@ -45,7 +46,7 @@ proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [S
   s.state = FIRST_PREPARED
   GS2_HEADER & s.clientFirstMessageBare
 
-proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: string): string =
+proc prepareFinalMessage*(s: ScramClient, password, serverFirstMessage: string): string =
   if s.state != FIRST_PREPARED:
     raise newException(ScramError, "First message have not been prepared, call prepareFirstMessage() first")
   var
@@ -67,14 +68,14 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     return ""
 
   let
-    saltedPassword = hi[T](password, salt, iterations)
-    clientKey = HMAC[T]($%saltedPassword, CLIENT_KEY)
-    storedKey = HASH[T]($%clientKey)
-    serverKey = HMAC[T]($%saltedPassword, SERVER_KEY)
+    saltedPassword = hi(s.hashType, password, salt, iterations)
+    clientKey = hmac(s.hashType, $%saltedPassword, CLIENT_KEY)
+    storedKey = digest(s.hashType, $%clientKey)
+    serverKey = hmac(s.hashType, $%saltedPassword, SERVER_KEY)
     clientFinalMessageWithoutProof = "c=biws,r=" & nonce
     authMessage =[s.clientFirstMessageBare, serverFirstMessage, clientFinalMessageWithoutProof].join(",")
-    clientSignature = HMAC[T]($%storedKey, authMessage)
-  s.serverSignature = HMAC[T]($%serverKey, authMessage)
+    clientSignature = hmac(s.hashType, $%storedKey, authMessage)
+  s.serverSignature = hmac(s.hashType, $%serverKey, authMessage)
   var clientProof = clientKey
   clientProof ^= clientSignature
   s.state = FINAL_PREPARED
@@ -105,7 +106,7 @@ proc getState*(s: ScramClient): ScramState =
   s.state
 
 when isMainModule:
-  var s = newScramClient[Sha256Digest]()
+  var s = newScramClient(sha256)
   s.clientNonce = "VeAOLsQ22fn/tjalHQIz7cQT"
 
   echo "test 1"
@@ -127,7 +128,7 @@ when isMainModule:
   #    S: v=rmF9pqV8S7suAoZWja4dJRkFsKQ=
   #
   echo "test 2"
-  var rfc = newScramClient[Sha1Digest]()
+  var rfc = newScramClient[sha1]()
   rfc.clientNonce = "fyko+d2lbbFgONRv9qkxdawL" # override for sake of test
   let rfcC1 = rfc.prepareFirstMessage("user")
   assert(rfcC1 == "n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL")

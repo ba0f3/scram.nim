@@ -1,17 +1,15 @@
-import random, base64, strutils, types, hmac
+import random, base64, strutils, nimcrypto, types
 from md5 import MD5Digest
-from sha1 import Sha1Digest
-from nimSHA2 import Sha256Digest, Sha512Digest
 
 randomize()
 
-proc `$%`*[T: MD5Digest|Sha1Digest|SHA256Digest|SHA512Digest](input: T): string =
+proc `$%`*[T: MD5Digest](input: T): string =
   result = newString(input.len)
   for i in 0..<input.len:
     result[i] = input[i].char
 
 template makeNonce*(): string =
-  base64.encode(hmac_sha1($rand(int.high), "scram.nim"))
+  base64.encode($sha1.hmac($rand(int.high), "scram.nim"))
 
 template `^=`*[T](a, b: T) =
   for x in 0..<a.len:
@@ -20,13 +18,18 @@ template `^=`*[T](a, b: T) =
     else:
       a[x] = (a[x].int32 xor b[x].int32).char
 
+#[
 proc HMAC*[T](password, salt: string): T =
   when T is MD5Digest:
     result = hmac_md5(password, salt)
   elif T is Sha1Digest:
     result = hmac_sha1(password, salt)
+  elif T is Sha224Digest:
+    result = hmac_sha224(password, salt)
   elif T is Sha256Digest:
     result = hmac_sha256(password, salt)
+  elif T is Sha384Digest:
+    result = hmac_sha384(password, salt)
   elif T is Sha512Digest:
     result = hmac_sha512(password, salt)
 
@@ -35,20 +38,19 @@ proc HASH*[T](s: string): T =
     result = hash_md5(s)
   elif T is Sha1Digest:
     result = hash_sha1(s)
+  elif T is SHA224Digest:
+    result = hash_sha224(s)
   elif T is Sha256Digest:
     result = hash_sha256(s)
+  elif T is SHA384Digest:
+    result = hash_sha384(s)
   elif T is Sha512Digest:
     result = hash_sha512(s)
+]#
 
-proc debug[T](s: T): string =
-  result = ""
-  for x in s:
-    result.add strutils.toHex(x.uint8).toLowerAscii
-
-
-proc hi*[T](password, salt: string, iterations: int): T =
-  var previous = HMAC[T](password, salt & INT_1)
+proc hi*(HashType: typedesc, password, salt: string, iterations: int): MDigest[HashType.bits] =
+  var previous = hmac(HashType, password, salt & INT_1)
   result = previous
   for _ in 1..<iterations:
-    previous = HMAC[T](password, $%previous)
+    previous = hmac(HashType, password, $%previous)
     result ^= previous
