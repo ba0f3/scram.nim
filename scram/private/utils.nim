@@ -1,11 +1,11 @@
 import random, base64, strutils, types, hmac
 from md5 import MD5Digest
 from sha1 import Sha1Digest
-from nimSHA2 import Sha256Digest, Sha512Digest
+from nimSHA2 import Sha224Digest, Sha256Digest, Sha384Digest, Sha512Digest
 
 randomize()
 
-proc `$%`*[T: MD5Digest|Sha1Digest|SHA256Digest|SHA512Digest](input: T): string =
+proc `$%`*[T](input: T): string =
   result = newString(input.len)
   for i in 0..<input.len:
     result[i] = input[i].char
@@ -15,7 +15,7 @@ template makeNonce*(): string =
 
 template `^=`*[T](a, b: T) =
   for x in 0..<a.len:
-    when T is Sha1Digest:
+    when T is Sha1Digest or T is Keccak512Digest:
       a[x] = (a[x].int32 xor b[x].int32).uint8
     else:
       a[x] = (a[x].int32 xor b[x].int32).char
@@ -25,20 +25,32 @@ proc HMAC*[T](password, salt: string): T =
     result = hmac_md5(password, salt)
   elif T is Sha1Digest:
     result = hmac_sha1(password, salt)
+  elif T is Sha224Digest:
+    result = hmac_sha224(password, salt)
   elif T is Sha256Digest:
     result = hmac_sha256(password, salt)
+  elif T is Sha384Digest:
+    result = hmac_sha384(password, salt)
   elif T is Sha512Digest:
     result = hmac_sha512(password, salt)
+  elif T is Keccak512Digest:
+    result = hmac_keccak512(password, salt)
 
 proc HASH*[T](s: string): T =
   when T is MD5Digest:
     result = hash_md5(s)
   elif T is Sha1Digest:
     result = hash_sha1(s)
+  elif T is Sha224Digest:
+    result = hash_sha224(s)
   elif T is Sha256Digest:
     result = hash_sha256(s)
+  elif T is Sha384Digest:
+    result = hmac_sha384(s)
   elif T is Sha512Digest:
     result = hash_sha512(s)
+  elif T is Keccak512Digest:
+    result = hash_keccak512(s)
 
 proc debug[T](s: T): string =
   result = ""

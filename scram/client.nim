@@ -1,6 +1,6 @@
 import base64, pegs, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
 
-export MD5Digest, SHA1Digest, SHA256Digest, SHA512Digest
+export MD5Digest, SHA1Digest, SHA224Digest, SHA256Digest, SHA384Digest, SHA512Digest, Keccak512Digest
 
 type
   ScramClient[T] = ref object of RootObj
