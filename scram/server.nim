@@ -1,11 +1,12 @@
+import strformat, strutils
 import base64, pegs, strutils, hmac, nimSHA2, private/[utils,types]
 
 type
   ScramServer*[T] = ref object of RootObj
-    serverNonce: string
+    serverNonce*: string
     clientFirstMessageBare: string
     serverFirstMessage: string
-    state: ScramState
+    state*: ScramState
     isSuccessful: bool
     userData: UserData
 
@@ -19,21 +20,32 @@ let
   CLIENT_FIRST_MESSAGE = peg"^([pny]'='?([^,]*)','([^,]*)','){('m='([^,]*)',')?'n='{[^,]*}',r='{[^,]*}(','(.*))*}$"
   CLIENT_FINAL_MESSAGE = peg"{'c='{[^,]*}',r='{[^,]*}}',p='{.*}$"
 
-proc initUserData*(password: string, iterations = 4096): UserData =
+proc initUserData*[T](typ: typedesc[T], password: string, iterations = 4096): UserData =
   var iterations = iterations
   if password.len == 0:
     iterations = 1
   let
     salt = makeNonce()[0..24]
-    saltedPassword = hi[SHA256Digest](password, salt, iterations)
-    clientKey = HMAC[SHA256Digest]($%saltedPassword, CLIENT_KEY)
-    storedKey = HASH[SHA256Digest]($%clientKey)
-    serverKey = HMAC[SHA256Digest]($%saltedPassword, SERVER_KEY)
+    saltedPassword = hi[T](password, salt, iterations)
+    clientKey = HMAC[T]($%saltedPassword, CLIENT_KEY)
+    storedKey = HASH[T]($%clientKey)
+    serverKey = HMAC[T]($%saltedPassword, SERVER_KEY)
+
+  # echo &"server password        {password}"
+  # echo &"server salt            {salt}"
+  # echo &"server iterations      {iterations}"
+  # echo &"server saltedPassword  {base64.encode(saltedPassword)}"
+  # echo &"server clientKey       {base64.encode(clientKey)}"
+  # echo &"server serverKey       {base64.encode(serverKey)}"
+  # echo &"server storedKey       {base64.encode(storedKey)}"
 
   result.salt = base64.encode(salt)
   result.iterations = iterations
   result.storedKey = base64.encode($%storedKey)
   result.serverKey = base64.encode($%serverKey)
+
+proc initUserData*(password: string, iterations = 4096): UserData =
+  initUserData(Sha256Digest, password, iterations)
 
 proc initUserData*(salt: string, iterations: int, serverKey, storedKey: string): UserData =
   result.salt = salt
@@ -45,33 +57,61 @@ proc newScramServer*[T](): ScramServer[T] {.deprecated: "use `new ScramServer[T]
   new ScramServer[T]
 
 proc handleClientFirstMessage*[T](s: ScramServer[T],clientFirstMessage: string): string =
+  let parts = clientFirstMessage.split(',', 2)
   var matches: array[3, string]
-  if not match(clientFirstMessage, CLIENT_FIRST_MESSAGE, matches):
+  # echo &"client first message {clientFirstMessage}"
+  if not match(clientFirstMessage, CLIENT_FIRST_MESSAGE, matches) or not parts.len == 3:
     s.state = ENDED
     return
-  s.clientFirstMessageBare = matches[0]
-  s.serverNonce = matches[2] & makeNonce()
+  # echo &"client first message matches {matches}"
+  s.clientFirstMessageBare = parts[2]
+  # Disabled code until this is resolved
+  # <https://github.com/nim-lang/Nim/issues/19104>
+  #s.serverNonce = matches[2] & makeNonce()
+  #echo &"s.serverNonce = {s.serverNonce}"
+  #echo &"username      = {matches[1]}"
+  #s.state = FIRST_CLIENT_MESSAGE_HANDLED
+  #matches[1] # username
+
   s.state = FIRST_CLIENT_MESSAGE_HANDLED
-  matches[1] # username
+  for kv in s.clientFirstMessageBare.split(','):
+    if kv[0..1] == "n=":
+      result = kv[2..^1]
+    elif kv[0..1] == "r=":
+      s.serverNonce = kv[2..^1] & makeNonce()
 
 proc prepareFirstMessage*(s: ScramServer, userData: UserData): string =
   s.state = FIRST_PREPARED
   s.userData = userData
   s.serverFirstMessage = "r=$#,s=$#,i=$#" % [s.serverNonce, userData.salt, $userData.iterations]
+  # echo &"server first message: {s.serverFirstMessage}"
   s.serverFirstMessage
 
 proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): string =
   var matches: array[4, string]
+  # echo &"client final message {clientFinalMessage}"
   if not match(clientFinalMessage, CLIENT_FINAL_MESSAGE, matches):
     s.state = ENDED
     return
-  let
-    clientFinalMessageWithoutProof = matches[0]
-    nonce = matches[2]
-    proof = matches[3]
+  # echo &"client final message matches {matches}"
+  #let
+  #  clientFinalMessageWithoutProof = matches[0]
+  #  nonce = matches[2]
+  #  proof = matches[3]
+  var clientFinalMessageWithoutProof, nonce, proof: string
+  for kv in clientFinalMessage.split(','):
+    if kv[0..1] == "p=":
+      proof = kv[2..^1]
+    else:
+      if clientFinalMessageWithoutProof.len > 0:
+        clientFinalMessageWithoutProof.add(',')
+      clientFinalMessageWithoutProof.add(kv)
+      if kv[0..1] == "r=":
+        nonce = kv[2..^1]
 
   if nonce != s.serverNonce:
     s.state = ENDED
+    # echo &"nonce mismatch {nonce} != {s.serverNonce}"
     return
 
   let
@@ -80,19 +120,34 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
     clientSignature = HMAC[T](storedKey, authMessage)
     serverSignature = HMAC[T](decode(s.userData.serverKey), authMessage)
     decodedProof = base64.decode(proof)
-  var clientKey = $clientSignature
-  clientKey ^= decodedProof
+    clientKey = custom_xor(clientSignature, decodedProof)
+  #var clientKey = $clientSignature
+  #clientKey ^= decodedProof
+  let resultKey = HASH[T](clientKey).raw_str
+  # echo &"server storedKey       {base64.encode(storedKey)}"
+  # echo &"server resultKey       {base64.encode(resultKey)}"
+  # echo &"server authMessage.1   {s.clientFirstMessageBare}"
+  # echo &"server authMessage.2   {s.serverFirstMessage}"
+  # echo &"server authMessage.3   {clientFinalMessageWithoutProof}"
+  # echo &"server authMessage     {authMessage}"
+  # echo &"server clientSignature {base64.encode(clientSignature)}"
+  # echo &"server clientKey       {base64.encode(clientKey)} .len = {clientKey.len} {$typeof(clientSignature)}"
+  # echo &"server decodedProof    {base64.encode(decodedProof)} .len = {decodedProof.len}"
 
-  let resultKey = $HASH[T](clientKey)
-  if resultKey != storedKey:
+  # SECURITY: constant time HMAC check
+  if not constantTimeEqual(resultKey, storedKey):
+    let k1 = base64.encode(resultKey)
+    let k2 = base64.encode(storedKey)
+    # echo &"key mismatch {k1} != {k2}"
     return
 
   s.isSuccessful = true
   s.state = ENDED
   when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
-    "v=" & base64.encode(serverSignature)
+    result = "v=" & base64.encode(serverSignature)
   else:
-    "v=" & base64.encode(serverSignature, newLine="")
+    result = "v=" & base64.encode(serverSignature, newLine="")
+  # echo &"server final message: {result}"
 
 
 proc isSuccessful*(s: ScramServer): bool =
