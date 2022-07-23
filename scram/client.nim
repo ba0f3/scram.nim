@@ -54,9 +54,6 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     iterations: int
   var matches: array[3, string]
   if match(serverFirstMessage, SERVER_FIRST_MESSAGE, matches):
-    #nonce = matches[0]
-    #salt = base64.decode(matches[1])
-    #iterations = parseInt(matches[2])
     for kv in serverFirstMessage.split(','):
       if kv[0..1] == "i=":
         iterations = parseInt(kv[2..^1])
@@ -86,19 +83,6 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
   var clientProof = clientKey
   clientProof ^= clientSignature
   s.state = FINAL_PREPARED
-  # echo &"client password        {password}"
-  # echo &"client salt            {salt}"
-  # echo &"client iterations      {iterations}"
-  # echo &"client saltedPassword  {base64.encode(saltedPassword)}"
-  # echo &"client clientKey       {base64.encode(clientKey)}"
-  # echo &"client storedKey       {base64.encode(storedKey)}"
-  # echo &"client serverKey       {base64.encode(serverKey)}"
-  # echo &"client authMessage.1   {s.clientFirstMessageBare}"
-  # echo &"client authMessage.2   {serverFirstMessage}"
-  # echo &"client authMessage.3   {clientFinalMessageWithoutProof}"
-  # echo &"client authMessage     {authMessage}"
-  # echo &"client clientSignature {base64.encode(clientSignature)}"
-  # echo &"client clientProof     {base64.encode(clientProof)}"
   when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
     clientFinalMessageWithoutProof & ",p=" & base64.encode(clientProof)
   else:
@@ -114,7 +98,6 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
     for kv in serverFinalMessage.split(','):
       if kv[0..1] == "v=":
         proposedServerSignature = base64.decode(kv[2..^1])
-    #let proposedServerSignature = base64.decode(matches[0])
     s.isSuccessful = proposedServerSignature == $%s.serverSignature
   s.isSuccessful
 
