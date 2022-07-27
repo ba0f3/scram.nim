@@ -1,5 +1,5 @@
 type
-  ScramError* = object of Exception
+  ScramError* = object of CatchableError
 
   DigestType* = enum
     MD5

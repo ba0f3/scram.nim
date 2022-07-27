@@ -1,4 +1,4 @@
-import random, base64, strutils, types, hmac
+import random, base64, strutils, types, hmac, bitops
 from md5 import MD5Digest
 from sha1 import Sha1Digest
 from nimSHA2 import Sha224Digest, Sha256Digest, Sha384Digest, Sha512Digest
@@ -20,6 +20,21 @@ template `^=`*[T](a, b: T) =
     else:
       a[x] = (a[x].int32 xor b[x].int32).char
 
+proc custom_xor*[T](bytes: T, str: string): string =
+  if bytes.len != str.len:
+    raise newException(RangeDefect, "xor must have both arguments of the same size")
+  result = str
+  for x in 0..<bytes.len:
+    result[x] = (bytes[x].uint8 xor str[x].uint8).char
+
+proc constantTimeEqual*(a, b: string): bool =
+  if a.len != b.len:
+    raise newException(RangeDefect, "must have both arguments of the same size")
+  var res: uint8 = 0
+  for x in 0..<a.len:
+    res = bitor(res, bitxor(a[x].uint8, b[x].uint8))
+  result = (res == 0)
+
 proc HMAC*[T](password, salt: string): T =
   when T is MD5Digest:
     result = hmac_md5(password, salt)
@@ -35,6 +50,12 @@ proc HMAC*[T](password, salt: string): T =
     result = hmac_sha512(password, salt)
   elif T is Keccak512Digest:
     result = hmac_keccak512(password, salt)
+
+proc raw_str*[T](digest: T): string =
+  when T is Sha1Digest:
+    for c in digest: result.add(char(c))
+  else:
+    result = $digest
 
 proc HASH*[T](s: string): T =
   when T is MD5Digest:
@@ -56,7 +77,6 @@ proc debug[T](s: T): string =
   result = ""
   for x in s:
     result.add strutils.toHex(x.uint8).toLowerAscii
-
 
 proc hi*[T](password, salt: string, iterations: int): T =
   var previous = HMAC[T](password, salt & INT_1)

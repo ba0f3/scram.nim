@@ -1,3 +1,4 @@
+import strformat
 import base64, pegs, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA224Digest, SHA256Digest, SHA384Digest, SHA512Digest, Keccak512Digest
@@ -53,9 +54,13 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     iterations: int
   var matches: array[3, string]
   if match(serverFirstMessage, SERVER_FIRST_MESSAGE, matches):
-    nonce = matches[0]
-    salt = base64.decode(matches[1])
-    iterations = parseInt(matches[2])
+    for kv in serverFirstMessage.split(','):
+      if kv[0..1] == "i=":
+        iterations = parseInt(kv[2..^1])
+      elif kv[0..1] == "r=":
+        nonce = kv[2..^1]
+      elif kv[0..1] == "s=":
+        salt = base64.decode(kv[2..^1])
   else:
     s.state = ENDED
     return ""
@@ -89,7 +94,10 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
   s.state = ENDED
   var matches: array[1, string]
   if match(serverFinalMessage, SERVER_FINAL_MESSAGE, matches):
-    let proposedServerSignature = base64.decode(matches[0])
+    var proposedServerSignature: string
+    for kv in serverFinalMessage.split(','):
+      if kv[0..1] == "v=":
+        proposedServerSignature = base64.decode(kv[2..^1])
     s.isSuccessful = proposedServerSignature == $%s.serverSignature
   s.isSuccessful
 
