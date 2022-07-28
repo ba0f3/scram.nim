@@ -1,7 +1,11 @@
-import random, base64, strutils, types, hmac, bitops
+import random, base64, strutils, types, hmac, bitops, openssl
 from md5 import MD5Digest
 from sha1 import Sha1Digest
 from nimSHA2 import Sha224Digest, Sha256Digest, Sha384Digest, Sha512Digest
+
+
+proc SSL_get_finished*(ssl: SslCtx, buf: cstring, count: csize_t): csize_t {.cdecl, dynlib: DLLSSLName, importc.}
+proc SSL_get_peer_finished*(ssl: SslCtx, buf: cstring, count: csize_t): csize_t {.cdecl, dynlib: DLLSSLName, importc.}
 
 randomize()
 
@@ -84,3 +88,38 @@ proc hi*[T](password, salt: string, iterations: int): T =
   for _ in 1..<iterations:
     previous = HMAC[T](password, $%previous)
     result ^= previous
+
+
+proc validateCB*(channel: ChannelType, socket: AnySocket) =
+  if channel == TLS_NONE:
+    return
+
+  when not defined(ssl):
+    raise newException(ScramError, "SSL required for channel binding")
+  else:
+
+    if channel > TLS_EXPORT:
+      raise newException(ScramError, "Channel type " & $channel & " is not supported")
+
+    if socket.isNil:
+      raise newException(ScramError, "Socket is not initialized")
+
+    if not socket.isSsl or socket.sslContext == nil:
+      raise newException(ScramError, "Socket is not wrapped in an SSL context")
+
+proc getCBData*(channel: ChannelType, socket: AnySocket, isServer = true): string =
+  when not defined(ssl):
+    raise newException(ScramError, "SSL required for channel binding")
+  else:
+    result = newString(1024)
+    if channel == TLS_UNIQUE:
+      var ret: csize_t
+      if isServer:
+        ret = SSL_get_peer_finished(socket.sslContext, result.cstring, 1024)
+      else:
+        ret = SSL_get_finished(socket.sslContext, result.cstring, 1024)
+
+      if ret == 0:
+        raise newException(ScramError, "SSLError: handshake has not reached the finished message")
+
+      result.setLen(ret)

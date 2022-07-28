@@ -1,3 +1,8 @@
+from net import Socket
+from asyncnet import AsyncSocket
+
+export Socket, AsyncSocket
+
 type
   ScramError* = object of CatchableError
 
@@ -13,6 +18,15 @@ type
     FINAL_PREPARED
     FIRST_CLIENT_MESSAGE_HANDLED
     ENDED
+
+  AnySocket* = Socket|AsyncSocket
+
+  ChannelType* = enum
+    TLS_NONE
+    TLS_SERVER_END_POINT
+    TLS_UNIQUE
+    TLS_UNIQUE_FOR_TELNET
+    TLS_EXPORT
 
 const
   GS2_HEADER* = "n,,"

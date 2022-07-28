@@ -1,14 +1,15 @@
-import strformat, strutils
-import base64, pegs, strutils, hmac, nimSHA2, private/[utils,types]
+import strformat, strutils, base64, pegs, hmac, nimSHA2, private/[utils,types]
 
 type
-  ScramServer*[T] = ref object of RootObj
-    serverNonce*: string
+  ScramServer[T] = ref object of RootObj
+    serverNonce: string
     clientFirstMessageBare: string
     serverFirstMessage: string
-    state*: ScramState
+    state: ScramState
     isSuccessful: bool
     userData: UserData
+    cbType: ChannelType
+    cbData: string
 
   UserData* = object
     salt*: string
@@ -45,23 +46,36 @@ proc initUserData*(salt: string, iterations: int, serverKey, storedKey: string):
   result.serverKey = serverKey
   result.storedKey = storedKey
 
-proc newScramServer*[T](): ScramServer[T] {.deprecated: "use `new ScramServer[T]` instead".} =
-  new ScramServer[T]
+proc newScramServer*[T](): ScramServer[T] =
+  result = new ScramServer[T]
+  result.state = INITIAL
+  result.isSuccessful = false
+  result.cbType = TLS_NONE
+
+proc newScramServer*[T](channel = TLS_UNIQUE, socket: AnySocket): ScramServer[T] =
+  result = newScramServer[T]()
+  validateCB(channel, socket)
+  result.cbType = channel
+  result.cbData = getCBData(channel, socket)
 
 proc handleClientFirstMessage*[T](s: ScramServer[T],clientFirstMessage: string): string =
   let parts = clientFirstMessage.split(',', 2)
-  var matches: array[3, string]
-  if not match(clientFirstMessage, CLIENT_FIRST_MESSAGE, matches) or not parts.len == 3:
-    s.state = ENDED
-    return
-  s.clientFirstMessageBare = parts[2]
+  #var matches: array[3, string]
+  #if not match(clientFirstMessage, CLIENT_FIRST_MESSAGE, matches) or not parts.len == 3:
+  #  s.state = ENDED
+  #  return
 
-  s.state = FIRST_CLIENT_MESSAGE_HANDLED
+  #if (gs2Header == "n"):
+
+
+  s.clientFirstMessageBare = parts[2]
   for kv in s.clientFirstMessageBare.split(','):
     if kv[0..1] == "n=":
       result = kv[2..^1]
     elif kv[0..1] == "r=":
       s.serverNonce = kv[2..^1] & makeNonce()
+
+  s.state = FIRST_CLIENT_MESSAGE_HANDLED
 
 proc prepareFirstMessage*(s: ScramServer, userData: UserData): string =
   s.state = FIRST_PREPARED
@@ -124,13 +138,13 @@ proc getState*(s: ScramServer): ScramState =
   s.state
 
 when isMainModule:
-  import client as c
+  import client as c, net
   var
     username = "bob"
     password = "secret"
     userdata = initUserData(password)
 
-    server = new ScramServer[SHA256Digest]
+    server = newScramServer[SHA256Digest]()
     client = newScramClient[SHA256Digest]()
 
   assert(server.state == INITIAL)
@@ -153,3 +167,7 @@ when isMainModule:
 
   assert client.verifyServerFinalMessage(serverFinalMessage) == true
   echo "Client is successful: ", client.isSuccessful() == true
+
+  var
+    socket = newSocket()
+    server1 = newScramServer[SHA256Digest](TLS_UNIQUE, socket)
