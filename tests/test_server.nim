@@ -1,11 +1,11 @@
-import unittest, scram/server, sha1, nimSHA2, base64, scram/private/[utils,types]
-
+import unittest, scram/server, sha1, nimSHA2, base64
+import scram/private/[utils, types]
 
 proc test[T](user, password, nonce, salt, cfirst, sfirst, cfinal, sfinal: string) =
-  var server = new ScramServer[T]
+  var server = newScramServer[T]()
   assert server.handleClientFirstMessage(cfirst) == user, "incorrect detected username"
-  assert server.state == FIRST_CLIENT_MESSAGE_HANDLED, "incorrect state"
-  server.serverNonce = nonce
+  assert server.getState() == FIRST_CLIENT_MESSAGE_HANDLED, "incorrect state"
+  server.setServerNonce(nonce)
   let
     iterations = 4096
     decodedSalt = base64.decode(salt)

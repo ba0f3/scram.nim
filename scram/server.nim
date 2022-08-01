@@ -1,4 +1,6 @@
-import strformat, strutils, base64, pegs, hmac, nimSHA2, private/[utils,types]
+import strformat, strutils, base64, hmac, nimSHA2, private/[utils,types]
+
+export ChannelType
 
 type
   ScramServer[T] = ref object of RootObj
@@ -8,6 +10,8 @@ type
     state: ScramState
     isSuccessful: bool
     userData: UserData
+    serverError: ServerError
+    serverErrorValueExt: string
     cbType: ChannelType
     cbData: string
 
@@ -16,10 +20,6 @@ type
     iterations*: int
     serverKey*: string
     storedKey*: string
-
-let
-  CLIENT_FIRST_MESSAGE = peg"^([pny]'='?([^,]*)','([^,]*)','){('m='([^,]*)',')?'n='{[^,]*}',r='{[^,]*}(','(.*))*}$"
-  CLIENT_FINAL_MESSAGE = peg"{'c='{[^,]*}',r='{[^,]*}}',p='{.*}$"
 
 proc initUserData*[T](typ: typedesc[T], password: string, iterations = 4096): UserData =
   var iterations = iterations
@@ -52,21 +52,41 @@ proc newScramServer*[T](): ScramServer[T] =
   result.isSuccessful = false
   result.cbType = TLS_NONE
 
-proc newScramServer*[T](channel = TLS_UNIQUE, socket: AnySocket): ScramServer[T] =
-  result = newScramServer[T]()
+proc newScramServer*[T](socket: AnySocket, channel = TLS_UNIQUE): ScramServer[T] =
   validateCB(channel, socket)
+
+  result = newScramServer[T]()
   result.cbType = channel
   result.cbData = getCBData(channel, socket)
 
-proc handleClientFirstMessage*[T](s: ScramServer[T],clientFirstMessage: string): string =
+proc setCBindType*[T](s: ScramServer[T], channel: ChannelType) = s.cbType = channel
+
+proc setCBindData*[T](s: ScramServer[T], data: string) = s.cbData = data
+
+proc setServerNonce*[T](s: ScramServer[T], nonce: string) = s.serverNonce = nonce
+
+proc handleClientFirstMessage*[T](s: ScramServer[T], clientFirstMessage: string): string =
   let parts = clientFirstMessage.split(',', 2)
-  #var matches: array[3, string]
-  #if not match(clientFirstMessage, CLIENT_FIRST_MESSAGE, matches) or not parts.len == 3:
-  #  s.state = ENDED
-  #  return
+  if parts.len != 3:
+    s.state = ENDED
+    return
 
-  #if (gs2Header == "n"):
-
+  let gs2CBindFlag = parts[0]
+  if (gs2CBindFlag[0] == 'n'):
+    if s.cbType != TLS_NONE:
+      s.serverError = SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING
+  elif (gs2CBindFlag[0] == 'y'):
+    if s.cbType != TLS_NONE:
+      s.serverError = SERVER_ERROR_SERVER_DOES_SUPPORT_CHANNEL_BINDING
+  elif (gs2CBindFlag[0] == 'p'):
+    if s.cbType == TLS_NONE:
+      s.serverError = SERVER_ERROR_CHANNEL_BINDING_NOT_SUPPORTED
+    let cbName = gs2CBindFlag.split("=")[1]
+    if cbName != $s.cbType:
+      s.serverError = SERVER_ERROR_UNSUPPORTED_CHANNEL_BINDING_TYPE
+  else:
+    s.serverError = SERVER_ERROR_OTHER_ERROR
+    s.serverErrorValueExt = "Invalid GS2 flag: " & gs2CBindFlag[0]
 
   s.clientFirstMessageBare = parts[2]
   for kv in s.clientFirstMessageBare.split(','):
@@ -83,12 +103,22 @@ proc prepareFirstMessage*(s: ScramServer, userData: UserData): string =
   s.serverFirstMessage = "r=$#,s=$#,i=$#" % [s.serverNonce, userData.salt, $userData.iterations]
   s.serverFirstMessage
 
+
+proc makeError(error: ServerError, ext: string = ""): string =
+  if error != SERVER_ERROR_NO_ERROR:
+    result = "e=" & $error
+    if ext.len != 0:
+      result &= " " & ext
+
 proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): string =
-  var matches: array[4, string]
-  if not match(clientFinalMessage, CLIENT_FINAL_MESSAGE, matches):
+
+  if s.serverError != SERVER_ERROR_NO_ERROR:
+    result = makeError(s.serverError, s.serverErrorValueExt)
     s.state = ENDED
     return
-  var clientFinalMessageWithoutProof, nonce, proof: string
+
+  var clientFinalMessageWithoutProof, nonce, proof, cbind: string
+
   for kv in clientFinalMessage.split(','):
     if kv[0..1] == "p=":
       proof = kv[2..^1]
@@ -98,8 +128,16 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
       clientFinalMessageWithoutProof.add(kv)
       if kv[0..1] == "r=":
         nonce = kv[2..^1]
+      elif kv[0..1] == "c=":
+        cbind = kv
+
+  if cbind != makeCBind(s.cbType, s.cbData):
+    result = makeError(SERVER_ERROR_CHANNEL_BINDINGS_DONT_MATCH)
+    s.state = ENDED
+    return
 
   if nonce != s.serverNonce:
+    result = makeError(SERVER_ERROR_OTHER_ERROR, "Server nonce does not match")
     s.state = ENDED
     return
 
@@ -110,12 +148,12 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
     serverSignature = HMAC[T](decode(s.userData.serverKey), authMessage)
     decodedProof = base64.decode(proof)
     clientKey = custom_xor(clientSignature, decodedProof)
-  let resultKey = HASH[T](clientKey).raw_str
+    resultKey = HASH[T](clientKey).raw_str
 
   # SECURITY: constant time HMAC check
   if not constantTimeEqual(resultKey, storedKey):
-    let k1 = base64.encode(resultKey)
-    let k2 = base64.encode(storedKey)
+    result = makeError(SERVER_ERROR_OTHER_ERROR, "constant time hmac check failed")
+    s.state = ENDED
     return
 
   s.isSuccessful = true
@@ -167,7 +205,3 @@ when isMainModule:
 
   assert client.verifyServerFinalMessage(serverFinalMessage) == true
   echo "Client is successful: ", client.isSuccessful() == true
-
-  var
-    socket = newSocket()
-    server1 = newScramServer[SHA256Digest](TLS_UNIQUE, socket)

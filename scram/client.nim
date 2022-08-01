@@ -1,7 +1,7 @@
-import strformat
-import base64, pegs, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
+import base64, strformat, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA224Digest, SHA256Digest, SHA384Digest, SHA512Digest, Keccak512Digest
+export ChannelType
 
 type
   ScramClient[T] = ref object of RootObj
@@ -10,29 +10,25 @@ type
     state: ScramState
     isSuccessful: bool
     serverSignature: T
-
-when compileOption("threads"):
-  var
-    SERVER_FIRST_MESSAGE_VAL: ptr Peg
-    SERVER_FINAL_MESSAGE_VAL: ptr Peg
-  template SERVER_FIRST_MESSAGE: Peg =
-    if SERVER_FIRST_MESSAGE_VAL.isNil:
-      SERVER_FIRST_MESSAGE_VAL = cast[ptr Peg](allocShared0(sizeof(Peg)))
-      SERVER_FIRST_MESSAGE_VAL[] = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
-    SERVER_FIRST_MESSAGE_VAL[]
-  template SERVER_FINAL_MESSAGE: Peg =
-    if SERVER_FINAL_MESSAGE_VAL.isNil:
-      SERVER_FINAL_MESSAGE_VAL = cast[ptr Peg](allocShared0(sizeof(Peg)))
-      SERVER_FINAL_MESSAGE_VAL[] = peg"'v='{[^,]*}$"
-    SERVER_FINAL_MESSAGE_VAL[]
-else:
-  let
-    SERVER_FIRST_MESSAGE = peg"'r='{[^,]*}',s='{[^,]*}',i='{\d+}$"
-    SERVER_FINAL_MESSAGE = peg"'v='{[^,]*}$"
+    cbType: ChannelType
+    cbData: string
 
 proc newScramClient*[T](): ScramClient[T] =
-  result = new(ScramClient[T])
+  result = new ScramClient[T]
   result.clientNonce = makeNonce()
+  result.cbType = TLS_NONE
+
+
+proc newScramClient*[T](socket: AnySocket, channel = TLS_UNIQUE): ScramClient[T] =
+  result = newScramClient[T]()
+  if socket != nil:
+    validateCB(channel, socket)
+    result.cbType = channel
+    result.cbData = getCBData(channel, socket)
+
+proc setCBindType*[T](s: ScramClient[T], channel: ChannelType) = s.cbType = channel
+
+proc setCBindData*[T](s: ScramClient[T], data: string) = s.cbData = data
 
 proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [ScramError]} =
   if username.len == 0:
@@ -44,7 +40,7 @@ proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [S
   s.clientFirstMessageBare.add(s.clientNonce)
 
   s.state = FIRST_PREPARED
-  GS2_HEADER & s.clientFirstMessageBare
+  result = makeGS2Header(s.cbType) & s.clientFirstMessageBare
 
 proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: string): string =
   if s.state != FIRST_PREPARED:
@@ -53,17 +49,15 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     nonce, salt: string
     iterations: int
   var matches: array[3, string]
-  if match(serverFirstMessage, SERVER_FIRST_MESSAGE, matches):
-    for kv in serverFirstMessage.split(','):
-      if kv[0..1] == "i=":
-        iterations = parseInt(kv[2..^1])
-      elif kv[0..1] == "r=":
-        nonce = kv[2..^1]
-      elif kv[0..1] == "s=":
-        salt = base64.decode(kv[2..^1])
-  else:
-    s.state = ENDED
-    return ""
+
+  for kv in serverFirstMessage.split(','):
+    if kv[0..1] == "i=":
+      iterations = parseInt(kv[2..^1])
+    elif kv[0..1] == "r=":
+      nonce = kv[2..^1]
+    elif kv[0..1] == "s=":
+      salt = base64.decode(kv[2..^1])
+
 
   if not nonce.startsWith(s.clientNonce):
     raise newException(ScramError, "Security error: invalid nonce received from server. Possible man-in-the-middle attack.")
@@ -76,7 +70,7 @@ proc prepareFinalMessage*[T](s: ScramClient[T], password, serverFirstMessage: st
     clientKey = HMAC[T]($%saltedPassword, CLIENT_KEY)
     storedKey = HASH[T]($%clientKey)
     serverKey = HMAC[T]($%saltedPassword, SERVER_KEY)
-    clientFinalMessageWithoutProof = "c=biws,r=" & nonce
+    clientFinalMessageWithoutProof = makeCBind(s.cbType, s.cbData) & ",r=" & nonce
     authMessage =[s.clientFirstMessageBare, serverFirstMessage, clientFinalMessageWithoutProof].join(",")
     clientSignature = HMAC[T]($%storedKey, authMessage)
   s.serverSignature = HMAC[T]($%serverKey, authMessage)
@@ -93,12 +87,14 @@ proc verifyServerFinalMessage*(s: ScramClient, serverFinalMessage: string): bool
     raise newException(ScramError, "You can call this method only once after calling prepareFinalMessage()")
   s.state = ENDED
   var matches: array[1, string]
-  if match(serverFinalMessage, SERVER_FINAL_MESSAGE, matches):
-    var proposedServerSignature: string
-    for kv in serverFinalMessage.split(','):
-      if kv[0..1] == "v=":
-        proposedServerSignature = base64.decode(kv[2..^1])
-    s.isSuccessful = proposedServerSignature == $%s.serverSignature
+
+  var proposedServerSignature: string
+  for kv in serverFinalMessage.split(','):
+    if kv[0..1] == "e=":
+      raise newException(ScramError, "ServerError: " & kv[2..^1])
+    elif kv[0..1] == "v=":
+      proposedServerSignature = base64.decode(kv[2..^1])
+  s.isSuccessful = proposedServerSignature == $%s.serverSignature
   s.isSuccessful
 
 proc isSuccessful*(s: ScramClient): bool =

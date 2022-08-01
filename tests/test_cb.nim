@@ -1,9 +1,18 @@
-import unittest, scram/server, scram/client, sha1, nimSHA2, base64, scram/private/[utils,types]
+import unittest, scram/[server,client], sha1, nimSHA2
+import scram/private/types
 
+const FAKE_CBDATA = "xxxxxxxxxxxxxxxx"
 
 proc test[T](user, password: string) =
   var client = newScramClient[T]()
   var server = newScramServer[T]()
+
+  client.setCBindType(TLS_UNIQUE)
+  client.setCBindData(FAKE_CBDATA)
+
+  server.setCBindType(TLS_UNIQUE)
+  server.setCBindData(FAKE_CBDATA)
+
   let cfirst = client.prepareFirstMessage(user)
   assert server.handleClientFirstMessage(cfirst) == user, "incorrect detected username"
   assert server.getState() == FIRST_CLIENT_MESSAGE_HANDLED, "incorrect state"
@@ -13,13 +22,13 @@ proc test[T](user, password: string) =
   assert client.verifyServerFinalMessage(sfinal), "incorrect server final message"
 
 suite "Scram Client-Server tests":
-  test "SCRAM-SHA1":
+  test "SCRAM-SHA1-PLUS":
     test[Sha1Digest](
       "user",
       "pencil"
     )
 
-  test "SCRAM-SHA256":
+  test "SCRAM-SHA256-PLUS":
     test[Sha256Digest](
       "bob",
       "secret"
