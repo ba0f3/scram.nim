@@ -64,6 +64,15 @@ suite "Scram Channel Binding tests":
         TLS_UNIQUE
       )
 
+  test "client-do-not-support-server-do":
+    expect ScramError:
+      test[Sha256Digest](
+        "bob",
+        "secret",
+        TLS_NONE,
+        TLS_UNIQUE
+      )
+
   test "server-do-not-suport-client-channel-binding-type":
     expect ScramError:
       test[Sha256Digest](
@@ -72,6 +81,7 @@ suite "Scram Channel Binding tests":
         TLS_UNIQUE,
         TLS_SERVER_END_POINT
       )
+
   test "channel-bindings-dont-match":
     expect ScramError:
       test[Sha256Digest](
