@@ -1,7 +1,7 @@
 import base64, strformat, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
 
 export MD5Digest, SHA1Digest, SHA224Digest, SHA256Digest, SHA384Digest, SHA512Digest, Keccak512Digest
-export ChannelType
+export getChannelBindingData
 
 type
   ScramClient[T] = ref object of RootObj
@@ -18,17 +18,9 @@ proc newScramClient*[T](): ScramClient[T] =
   result.clientNonce = makeNonce()
   result.cbType = TLS_NONE
 
+proc setChannelBindingType*[T](s: ScramClient[T], channel: ChannelType) = s.cbType = channel
 
-proc newScramClient*[T](socket: AnySocket, channel = TLS_UNIQUE): ScramClient[T] =
-  result = newScramClient[T]()
-  if socket != nil:
-    validateCB(channel, socket)
-    result.cbType = channel
-    result.cbData = getCBData(channel, socket)
-
-proc setCBindType*[T](s: ScramClient[T], channel: ChannelType) = s.cbType = channel
-
-proc setCBindData*[T](s: ScramClient[T], data: string) = s.cbData = data
+proc setChannelBindingData*[T](s: ScramClient[T], data: string) = s.cbData = data
 
 proc prepareFirstMessage*(s: ScramClient, username: string): string {.raises: [ScramError]} =
   if username.len == 0:

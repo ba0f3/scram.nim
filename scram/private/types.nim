@@ -1,8 +1,3 @@
-from net import Socket
-from asyncnet import AsyncSocket
-
-export Socket, AsyncSocket
-
 type
   ScramError* = object of CatchableError
 
@@ -18,8 +13,6 @@ type
     FINAL_PREPARED
     FIRST_CLIENT_MESSAGE_HANDLED
     ENDED
-
-  AnySocket* = Socket|AsyncSocket
 
   ChannelType* = enum
     TLS_NONE = ""

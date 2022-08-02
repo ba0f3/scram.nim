@@ -4,8 +4,37 @@ from sha1 import Sha1Digest
 from nimSHA2 import Sha224Digest, Sha256Digest, Sha384Digest, Sha512Digest
 
 
-proc SSL_get_finished*(ssl: SslPtr, buf: cstring, count: csize_t): csize_t {.cdecl, dynlib: DLLSSLName, importc.}
-proc SSL_get_peer_finished*(ssl: SslPtr, buf: cstring, count: csize_t): csize_t {.cdecl, dynlib: DLLSSLName, importc.}
+#from net import Socket
+#from asyncnet import AsyncSocket
+
+#export Socket, AsyncSocket
+
+type
+  AnySocket* = Socket|AsyncSocket
+
+const
+  NID_md5 = 4
+  NID_md5_sha1 = 114
+  EVP_MAX_MD_SIZE = 64
+
+{.push cdecl, dynlib: DLLSSLName, importc.}
+
+proc SSL_get_finished(ssl: SslPtr, buf: cstring, count: csize_t): csize_t
+proc SSL_get_peer_finished(ssl: SslPtr, buf: cstring, count: csize_t): csize_t
+
+proc SSL_get_certificate(ssl: SslPtr): PX509
+proc SSL_get_peer_certificate(ssl: SslPtr): PX509
+
+proc X509_get_signature_nid(x: PX509): int32
+proc OBJ_find_sigid_algs(signature: int32, pdigest: pointer, pencryption: pointer): int32
+proc OBJ_nid2sn(n: int): cstring
+
+proc EVP_sha256(): PEVP_MD
+proc EVP_get_digestbynid(): PEVP_MD
+
+proc X509_digest(data: PX509, kind: PEVP_MD, md: ptr char, len: ptr uint32): int32
+
+{.pop.}
 
 randomize()
 
@@ -104,30 +133,67 @@ proc makeCBind*(channel: ChannelType, data: string = ""): string =
     result = "c=" & base64.encode(makeGS2Header(channel) & data)
 
 
-proc validateCB*(channel: ChannelType, socket: AnySocket) =
+proc validateChannelBinding*(channel: ChannelType, socket: AnySocket) =
   if channel == TLS_NONE:
     return
 
   if channel > TLS_EXPORT:
-    raise newException(ScramChannelBindingError, "Channel type " & $channel & " is not supported")
+    raise newException(ScramError, "Channel type " & $channel & " is not supported")
 
   if socket.isNil:
-    raise newException(ScramChannelBindingError, "Socket is not initialized")
+    raise newException(ScramError, "Socket is not initialized")
 
   if not socket.isSsl or socket.sslHandle() == nil:
-    raise newException(ScramChannelBindingError, "Socket is not wrapped in a SSL context")
+    raise newException(ScramError, "Socket is not wrapped in a SSL context")
 
-proc getCBData*(channel: ChannelType, socket: AnySocket, isServer = true): string =
+proc getChannelBindingData*(channel: ChannelType, socket: AnySocket, isServer = true): string =
+  # Ref: https://paquier.xyz/postgresql-2/channel-binding-openssl/
 
-  result = newString(1024)
+  validateChannelBinding(channel, socket)
+
+  result = newString(EVP_MAX_MD_SIZE)
   if channel == TLS_UNIQUE:
     var ret: csize_t
     if isServer:
-      ret = SSL_get_peer_finished(socket.sslHandle(), result.cstring, 1024)
+      ret = SSL_get_peer_finished(socket.sslHandle(), result.cstring, EVP_MAX_MD_SIZE)
     else:
-      ret = SSL_get_finished(socket.sslHandle(), result.cstring, 1024)
+      ret = SSL_get_finished(socket.sslHandle(), result.cstring, EVP_MAX_MD_SIZE)
 
     if ret == 0:
-      raise newException(ScramChannelBindingError, "SSLError: handshake has not reached the finished message")
-
+      raise newException(ScramError, "SSLError: handshake has not reached the finished message")
     result.setLen(ret)
+
+  elif channel == TLS_SERVER_END_POINT:
+    var
+      serverCert: PX509
+      algoNid: int32
+      algoType: PEVP_MD
+      hash: array[EVP_MAX_MD_SIZE, char]
+      hashSize: int32
+
+    if isServer:
+      serverCert = cast[PX509](SSL_get_certificate(socket.sslHandle()))
+    else:
+      serverCert = cast[PX509](SSL_get_peer_certificate(socket.sslHandle()))
+
+    if serverCert == nil:
+      raise newException(ScramError, "SSLError: could not load server certtificate")
+
+    if OBJ_find_sigid_algs(X509_get_signature_nid(serverCert), addr algoNid, nil) == 0:
+      raise newException(ScramError, "SSLError: could not determine server certificate signature algorithm")
+
+    if algoNid == NID_md5 or algoNid == NID_md5_sha1:
+      algoType = EVP_sha256()
+    else:
+      algoType = EVP_get_digestbynid(algoNid)
+      if algoType == nil:
+        raise newException(ScramError, "SSLError: could not find digest for NID " & OBJ_nid2sn(algoNid))
+
+    if X509_digest(serverCert, algoType, hash, addr hashSize) == 0:
+      raise newException(ScramError, "SSLError: could not generate server certificate hash")
+
+    copyMem(addr result[0], hash, hashSize)
+    result.setLen(hashSize)
+
+  else:
+    raise newException(ScramError, "Channel " & $channel & " is not supported yet")
