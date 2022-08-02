@@ -3,10 +3,10 @@ import unittest, scram/server, scram/client, sha1, nimSHA2, base64, scram/privat
 
 proc test[T](user, password: string) =
   var client = newScramClient[T]()
-  var server = new ScramServer[T]
+  var server = newScramServer[T]()
   let cfirst = client.prepareFirstMessage(user)
   assert server.handleClientFirstMessage(cfirst) == user, "incorrect detected username"
-  assert server.state == FIRST_CLIENT_MESSAGE_HANDLED, "incorrect state"
+  assert server.getState() == FIRST_CLIENT_MESSAGE_HANDLED, "incorrect state"
   let sfirst = server.prepareFirstMessage(initUserData(T, password))
   let cfinal = client.prepareFinalMessage(password, sfirst)
   let sfinal = server.prepareFinalMessage(cfinal)
