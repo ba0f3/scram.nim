@@ -22,18 +22,12 @@ Salted Challenge Response Authentication Mechanism (SCRAM)
 
 ### Standards
 
-`RFC 5802 <https://tools.ietf.org/html/rfc5802>`_
-  Describes SCRAM.
-`RFC 7677 <https://datatracker.ietf.org/doc/html/rfc7677>`_
-  Registers SCRAM-SHA-256 and SCRAM-SHA-256-PLUS.
-`draft-melnikov-scram-sha-512-02 <https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha-512>`_
-  Registers SCRAM-SHA-512 and SCRAM-SHA-512-PLUS.
-`draft-melnikov-scram-sha3-512 <https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha3-512>`_
-  Registers SCRAM-SHA3-512 and SCRAM-SHA3-512-PLUS.
-`RFC 5929 <https://datatracker.ietf.org/doc/html/rfc5929>`_
-  Channel Bindings for TLS.
-`RFC 9266 <https://datatracker.ietf.org/doc/html/rfc9266>`_
-  Defines the ``tls-exporter`` channel binding, which is `not yet supported by scram.nim
+* [RFC 5802](https://tools.ietf.org/html/rfc5802) Describes SCRAM.
+* [RFC 7677](https://datatracker.ietf.org/doc/html/rfc7677) Registers SCRAM-SHA-256 and SCRAM-SHA-256-PLUS.
+* [draft-melnikov-scram-sha-512-02](https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha-512) Registers SCRAM-SHA-512 and SCRAM-SHA-512-PLUS.
+* [draft-melnikov-scram-sha3-512](https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha3-512) Registers SCRAM-SHA3-512 and SCRAM-SHA3-512-PLUS.
+* [RFC 5929](https://datatracker.ietf.org/doc/html/rfc5929) Channel Bindings for TLS.
+* [RFC 9266](https://datatracker.ietf.org/doc/html/rfc9266) Defines the `tls-exporter` channel binding, which is not supported yet
 
 ### Examples
 
