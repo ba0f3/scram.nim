@@ -48,7 +48,7 @@ template makeNonce*(): string =
 
 template `^=`*[T](a, b: T) =
   for x in 0..<a.len:
-    when T is Sha1Digest or T is Keccak512Digest or T is SHA256Digest:
+    when a[0].type is uint8:
       a[x] = (a[x].int32 xor b[x].int32).uint8
     else:
       a[x] = (a[x].int32 xor b[x].int32).char
