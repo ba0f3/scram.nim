@@ -1,4 +1,5 @@
-import base64, strformat, strutils, hmac, sha1, nimSHA2, md5, private/[utils,types]
+import base64, strformat, strutils, hmac, nimSHA2, private/[utils,types]
+import checksums/[sha1, md5]
 
 export MD5Digest, SHA1Digest, SHA224Digest, SHA256Digest, SHA384Digest, SHA512Digest, Keccak512Digest
 export getChannelBindingData
@@ -152,10 +153,7 @@ proc prepareFinalMessage*[T](s: ScramServer[T], clientFinalMessage: string): str
 
   s.isSuccessful = true
   s.state = ENDED
-  when NimMajor >= 1 and (NimMinor >= 1 or NimPatch >= 2):
-    result = "v=" & base64.encode(serverSignature)
-  else:
-    result = "v=" & base64.encode(serverSignature, newLine="")
+  result = "v=" & base64.encode(serverSignature)
 
 
 proc isSuccessful*(s: ScramServer): bool =

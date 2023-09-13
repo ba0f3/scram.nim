@@ -1,4 +1,5 @@
-import unittest, scram/server, sha1, nimSHA2, base64
+import unittest, scram/server, nimSHA2, base64
+import checksums/sha1
 import scram/private/[utils, types]
 
 proc test[T](user, password, nonce, salt, cfirst, sfirst, cfinal, sfinal: string) =

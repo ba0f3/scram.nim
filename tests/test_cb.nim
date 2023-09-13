@@ -1,4 +1,5 @@
-import unittest, scram/[server,client], sha1, nimSHA2
+import unittest, scram/[server,client], nimSHA2
+import checksums/sha1
 import scram/private/types
 
 const FAKE_CBDATA = "xxxxxxxxxxxxxxxx"
