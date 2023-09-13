@@ -1,4 +1,5 @@
-import unittest, scram/server, scram/client, sha1, nimSHA2, base64, scram/private/[utils,types]
+import unittest, scram/server, scram/client, nimSHA2, base64, scram/private/[utils,types]
+import checksums/sha1
 
 
 proc test[T](user, password: string) =

@@ -1,6 +1,6 @@
 import random, base64, strutils, types, hmac, bitops, openssl, net, asyncnet
-from md5 import MD5Digest
-from sha1 import Sha1Digest
+from checksums/md5 import MD5Digest
+from checksums/sha1 import Sha1Digest
 from nimSHA2 import Sha224Digest, Sha256Digest, Sha384Digest, Sha512Digest
 
 
@@ -29,10 +29,10 @@ proc X509_get_signature_nid(x: PX509): int32
 proc OBJ_find_sigid_algs(signature: int32, pdigest: pointer, pencryption: pointer): int32
 proc OBJ_nid2sn(n: int): cstring
 
-proc EVP_sha256(): PEVP_MD
-proc EVP_get_digestbynid(): PEVP_MD
+proc EVP_sha256(): EVP_MD
+proc EVP_get_digestbynid(): EVP_MD
 
-proc X509_digest(data: PX509, kind: PEVP_MD, md: ptr char, len: ptr uint32): int32
+proc X509_digest(data: PX509, kind: EVP_MD, md: ptr char, len: ptr uint32): int32
 
 {.pop.}
 
@@ -167,7 +167,7 @@ proc getChannelBindingData*(channel: ChannelType, socket: AnySocket, isServer = 
     var
       serverCert: PX509
       algoNid: int32
-      algoType: PEVP_MD
+      algoType: EVP_MD
       hash: array[EVP_MAX_MD_SIZE, char]
       hashSize: int32
 
